@@ -1,0 +1,128 @@
+{
+  "schema_version": 3,
+  "public_url": "http://120.24.117.67/projects/contract-manager-eval/",
+  "final_url": "http://120.24.117.67/projects/contract-manager-eval/login",
+  "base_path_ok": true,
+  "release_version": "0.0.1",
+  "document_response_headers": {
+    "server": "nginx/1.24.0 (Ubuntu)",
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-cache"
+  },
+  "pages": [
+    {
+      "name": "login",
+      "url": "http://120.24.117.67/projects/contract-manager-eval/login",
+      "title": "登录 - 合同管理系统",
+      "ok": true,
+      "notes": "Login page renders correctly with demo account placeholders"
+    },
+    {
+      "name": "contract_list_admin",
+      "url": "http://120.24.117.67/projects/contract-manager-eval/contracts",
+      "title": "合同列表 - 合同管理系统",
+      "ok": true,
+      "notes": "4 seed contracts displayed, status badges colored, search/filter UI present"
+    },
+    {
+      "name": "user_management",
+      "url": "http://120.24.117.67/projects/contract-manager-eval/users",
+      "title": "用户管理 - 合同管理系统",
+      "ok": true,
+      "notes": "3 demo users with correct role badges"
+    },
+    {
+      "name": "contract_detail",
+      "url": "http://120.24.117.67/projects/contract-manager-eval/contracts/1",
+      "title": "合同详情 - 合同管理系统",
+      "ok": true,
+      "notes": "All fields displayed, status operations, attachment upload UI present"
+    },
+    {
+      "name": "contract_list_viewer",
+      "url": "http://120.24.117.67/projects/contract-manager-eval/contracts",
+      "title": "合同列表 - 合同管理系统",
+      "ok": true,
+      "notes": "Viewer role: no create/edit/delete buttons, no user management nav"
+    }
+  ],
+  "workflow_checks": [
+    {
+      "name": "login_flow",
+      "ok": true,
+      "notes": "Login via POST username=admin&password=admin123 succeeds, redirects to contracts"
+    },
+    {
+      "name": "anonymous_redirect",
+      "ok": true,
+      "notes": "Anonymous access to /contracts redirects to /login"
+    },
+    {
+      "name": "viewer_permissions",
+      "ok": true,
+      "notes": "Viewer can only view contracts; no create/edit/delete/upload/status buttons"
+    },
+    {
+      "name": "viewer_admin_guard",
+      "ok": true,
+      "notes": "Viewer accessing /users returns 403 {detail: 需要管理员权限}"
+    },
+    {
+      "name": "logout_flow",
+      "ok": true,
+      "notes": "Logout redirects to login page"
+    }
+  ],
+  "failed_requests": [],
+  "http_errors": [],
+  "console_errors": [],
+  "screenshots": [
+    "evidence/verification/browser-0.0.1/01-login.png",
+    "evidence/verification/browser-0.0.1/02-contract-list-admin.png",
+    "evidence/verification/browser-0.0.1/03-user-management.png",
+    "evidence/verification/browser-0.0.1/04-contract-detail.png",
+    "evidence/verification/browser-0.0.1/05-viewer-contract-list.png"
+  ],
+  "visual_review": {
+    "provider": "kimi",
+    "model": "moonshot-v1-vision",
+    "verdict": "pass",
+    "issues": [],
+    "summary": "All 5 pages visually verified: layout normal, no overlapping or truncated text, CSS styles applied correctly, status badges color-coded, no visual anomalies. Viewer permissions visually confirmed (no restricted buttons/links visible). No CAPTCHA or verification challenges present."
+  },
+  "static_assets": [
+    {
+      "url": "http://120.24.117.67/projects/contract-manager-eval/static/css/style.css?v=0.0.1",
+      "type": "stylesheet",
+      "http_status": 200,
+      "transfer_size": 0,
+      "ok": true
+    },
+    {
+      "url": "http://120.24.117.67/projects/contract-manager-eval/static/js/app.js?v=0.0.1",
+      "type": "script",
+      "http_status": 200,
+      "transfer_size": 0,
+      "ok": true
+    }
+  ],
+  "stylesheets": [
+    {
+      "resolved_url": "http://120.24.117.67/projects/contract-manager-eval/static/css/style.css?v=0.0.1",
+      "http_status": 200,
+      "ok": true
+    }
+  ],
+  "asset_probes": [
+    {
+      "url": "http://120.24.117.67/projects/contract-manager-eval/static/css/style.css?v=0.0.1",
+      "http_status": 200,
+      "ok": true
+    },
+    {
+      "url": "http://120.24.117.67/projects/contract-manager-eval/static/js/app.js?v=0.0.1",
+      "http_status": 200,
+      "ok": true
+    }
+  ]
+}
