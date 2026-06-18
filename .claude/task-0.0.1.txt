@@ -1,0 +1,54 @@
+你是合同管理系统的技术专家。请按以下步骤推进迭代 0.0.1：
+
+## 1. 先读文档
+- .claude/CLAUDE.md（技术约束）
+- docs/architecture.md（当前为空模板，需要你填写）
+- docs/iterations/0.0.1.md（迭代范围）
+- case/events.jsonl 中的 e000002 requirement_defined（完整需求）
+
+## 2. 输出技术方案
+把技术方案、风险、任务拆解写入 docs/iterations/0.0.1.md。
+
+## 3. 完整交付物（必须全部实施）
+
+### 后端 (FastAPI + SQLAlchemy + SQLite)
+- 数据模型：User (id, username, password_hash, display_name, email, role, status, created_at, updated_at), Contract (id, contract_no, title, party_a, party_b, amount, status, sign_date, start_date, end_date, description, created_by FK, created_at, updated_at), Attachment (id, contract_id FK, filename, original_name, file_type, file_size, storage_path, uploaded_by FK, uploaded_at), AuditLog (id, user_id FK, action, entity_type, entity_id, detail, created_at)
+- JWT 认证中间件
+- REST API：登录、用户 CRUD（admin 权限）、合同 CRUD + 状态流转、附件上传下载删除
+- 附件校验：扩展名 + magic bytes（pdf 头 %PDF-，docx 头 PK，doc 头 D0CF11E0），≤10MB
+- 数据库初始化脚本 + 种子数据（3 个演示账号）
+- .env.example
+
+### 前端 (Jinja2 + 静态 CSS/JS)
+- 登录页
+- 合同列表页（表格，分状态筛选）
+- 合同详情/编辑页
+- 附件上传（文件选择 + 预览）
+- 用户管理页（仅 admin）
+- 导航栏 + 退出登录
+- 所有静态资源 URL 带 ?v=0.0.1 版本令牌
+
+### 数据库
+- SQLite，初始化脚本 + 迁移
+- 种子数据：admin/admin123, manager/manager123, viewer/viewer123（密码 bcrypt 哈希）
+
+### 自测
+- pytest 覆盖：登录认证、用户 CRUD、合同 CRUD + 状态流转、附件上传下载 + 类型校验、权限边界
+- 测试输出保存到 evidence/claude/
+
+### 文档
+- docs/architecture.md：业务模型、技术架构、模块职责、数据流、部署拓扑、安全边界
+- docs/runbook.md：本地运行步骤、环境要求
+- docs/decisions/：至少记录 01-python-fastapi-sqlite.md 和 02-jinja2-ssr.md
+
+## 4. 环境
+- Python 环境：/Users/cqw/外部需求/.conda/codingagent/bin/python
+- 工作目录：/Users/cqw/外部需求/contract-manager-eval
+- 分支：iteration/0.0.1
+
+## 5. 提交规范
+- 每项可验证改动一个小提交
+- 不修改 case/ 目录
+- 不合并 main、不打 tag、不部署
+
+请先输出技术方案和任务拆解，然后逐项实施。每完成一个模块自测后继续下一个。全部完成后保存自测输出到 evidence/claude/，向我申请 Hermes 独立验收。
