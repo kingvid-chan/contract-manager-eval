@@ -1,6 +1,6 @@
 """Auth router: login endpoint."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Form, Response
+from fastapi import APIRouter, Depends, HTTPException, status, Form, Response, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
@@ -13,18 +13,34 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/login")
-def login(
+async def login(
+    request: Request,
     response: Response,
-    username: str = Form(None),
-    password: str = Form(None),
     db: Session = Depends(get_db),
-    redirect: str = Form(None),
 ):
     """Authenticate user and return a JWT token.
 
-    Supports both form-encoded (SSR) and redirect pattern.
+    Supports JSON body (fetch/SPA) and form-encoded (SSR).
     Sets a cookie for SSR pages.
     """
+    content_type = request.headers.get("content-type", "")
+    redirect = None
+
+    if "application/json" in content_type:
+        body = await request.json()
+        username = body.get("username", "")
+        password = body.get("password", "")
+    else:
+        form_data = await request.form()
+        username = str(form_data.get("username", ""))
+        password = str(form_data.get("password", ""))
+        redirect = str(form_data.get("redirect", "")) or None
+    if not username or not password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="用户名和密码不能为空",
+        )
+
     user = db.query(User).filter(User.username == username).first()
     if not user or not verify_password(password, user.password_hash):
         raise HTTPException(
@@ -40,7 +56,22 @@ def login(
 
     token = create_access_token(data={"sub": str(user.id), "role": user.role.value})
 
-    # Set cookie for SSR pages
+    # For form-based login from SSR, redirect to contracts
+    if redirect:
+        from starlette.responses import RedirectResponse
+        from app.config import settings
+        redirect = redirect or f"{settings.BASE_PATH}/contracts"
+        resp = RedirectResponse(url=redirect, status_code=302)
+        resp.set_cookie(
+            key="access_token",
+            value=token,
+            httponly=False,
+            max_age=8 * 3600,
+            path="/",
+        )
+        return resp
+
+    # JSON response for SPA-style API calls
     resp = JSONResponse(content={
         "access_token": token,
         "token_type": "bearer",
@@ -61,19 +92,4 @@ def login(
         max_age=8 * 3600,
         path="/",
     )
-
-    # If this is a form-based login from SSR, redirect to contracts
-    if redirect is not None:
-        from starlette.responses import RedirectResponse
-        from app.config import settings
-        dest = redirect or f"{settings.BASE_PATH}/contracts"
-        resp = RedirectResponse(url=dest, status_code=302)
-        resp.set_cookie(
-            key="access_token",
-            value=token,
-            httponly=False,
-            max_age=8 * 3600,
-            path="/",
-        )
-
     return resp
