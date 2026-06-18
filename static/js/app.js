@@ -43,6 +43,10 @@
     if (!(options.body instanceof FormData)) {
       headers['Content-Type'] = headers['Content-Type'] || 'application/json';
     }
+    // Prefix all API paths with BASE_PATH (e.g. /api/... → /projects/contract-manager-eval/api/...)
+    if (!path.startsWith(BASE_PATH)) {
+      path = BASE_PATH + path;
+    }
     var resp = await fetch(path, {
       method: options.method || 'GET',
       headers: headers,
