@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "name": "合同管理系统",
+  "slug": "contract-manager-eval",
+  "local_path": "/Users/cqw/外部需求/contract-manager-eval",
+  "github_url": "https://github.com/kingvid-chan/contract-manager-eval",
+  "preview": {
+    "server": "aliyun-cowork",
+    "deploy_root": "/srv/codingagent/contract-manager-eval",
+    "service_name": "codingagent-contract-manager-eval",
+    "port": 8100,
+    "base_path": "/projects/contract-manager-eval/",
+    "public_url": "http://120.24.117.67/projects/contract-manager-eval/",
+    "health_path": "/projects/contract-manager-eval/healthz"
+  }
+}
