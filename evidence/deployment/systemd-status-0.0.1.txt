@@ -1,0 +1,15 @@
+● codingagent-contract-manager-eval.service - CodingAgent — 合同管理系统 (contract-manager-eval)
+     Loaded: loaded (/etc/systemd/system/codingagent-contract-manager-eval.service; enabled; preset: enabled)
+     Active: active (running) since Thu 2026-06-18 23:42:58 CST; 7s ago
+   Main PID: 861991 (uvicorn)
+      Tasks: 6 (limit: 4124)
+     Memory: 51.4M (peak: 51.8M)
+        CPU: 724ms
+     CGroup: /system.slice/codingagent-contract-manager-eval.service
+             └─861991 /srv/codingagent/contract-manager-eval/venv/bin/python3 /srv/codingagent/contract-manager-eval/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8100
+
+Jun 18 23:42:58 iZwz9jat7ii9degq3lpjgtZ systemd[1]: Started codingagent-contract-manager-eval.service - CodingAgent — 合同管理系统 (contract-manager-eval).
+Jun 18 23:42:59 iZwz9jat7ii9degq3lpjgtZ uvicorn[861991]: INFO:     Started server process [861991]
+Jun 18 23:42:59 iZwz9jat7ii9degq3lpjgtZ uvicorn[861991]: INFO:     Waiting for application startup.
+Jun 18 23:42:59 iZwz9jat7ii9degq3lpjgtZ uvicorn[861991]: INFO:     Application startup complete.
+Jun 18 23:42:59 iZwz9jat7ii9degq3lpjgtZ uvicorn[861991]: INFO:     Uvicorn running on http://127.0.0.1:8100 (Press CTRL+C to quit)

@@ -1,0 +1,10 @@
+HTTP/1.1 301 Moved Permanently
+Server: nginx/1.24.0 (Ubuntu)
+Date: Thu, 18 Jun 2026 15:43:07 GMT
+Content-Type: text/html
+Content-Length: 178
+Connection: keep-alive
+Location: https://120.24.117.67/projects/contract-manager-eval/login
+
+HTTP/1.1 200 OK
+Server: nginx/1.24.0 (Ubuntu)
