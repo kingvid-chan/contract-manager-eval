@@ -1,0 +1,14 @@
+=== Hermes Independent Verification — 0.0.1 ===
+Timestamp: 2026-06-18T04:31:00Z
+VERIFIED_COMMIT: 960724104aeea84ee9644b7935a07e5d70666183
+
+1. TEST SUITE: 69/69 passed (0 failed, 0 errors)
+2. LOGIN: admin/manager/viewer all authenticate successfully
+3. PERMISSIONS: viewer gets 403 on users endpoint
+4. STATE MACHINE: draft→pending→signed→terminated all work
+5. INVALID TRANSITION: terminated→signed correctly rejected
+6. Cache-Control: no-cache present on SSR HTML responses (HTTP header, not meta)
+7. VERSION TOKEN: ?v=0.0.1 on static resource URLs
+8. BASE PATH: /projects/contract-manager-eval/ prefix on all SSR routes and static assets
+9. .env: NOT in git repository
+10. BRANCH: iteration/0.0.1, not merged to main, no tags
