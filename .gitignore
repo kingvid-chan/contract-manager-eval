@@ -8,3 +8,6 @@ __pycache__/
 node_modules/
 dist/
 process-log/
+data/
+uploads/
+evidence/claude/*.txt

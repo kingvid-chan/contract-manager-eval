@@ -1,5 +1,105 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head><meta charset="UTF-8"><title>合同表单</title></head>
-<body><h1>合同表单</h1><p>Placeholder</p></body>
-</html>
+{% extends "base.html" %}
+{% block title %}{% if contract %}编辑合同{% else %}新建合同{% endif %} - 合同管理系统{% endblock %}
+{% block content %}
+<div class="container">
+  <div class="page-header">
+    <h1>{% if contract %}编辑合同「{{ contract.title }}」{% else %}新建合同{% endif %}</h1>
+    <a href="{{ base_path }}/contracts" class="btn btn-outline">返回列表</a>
+  </div>
+
+  <form method="post" data-validate
+        action="{% if contract %}/api/contracts/{{ contract.id }}{% else %}/api/contracts{% endif %}"
+        id="contract-form">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="contract_no">合同编号 *</label>
+        <input type="text" id="contract_no" name="contract_no" required
+               value="{{ contract.contract_no if contract else '' }}"
+               {% if contract %}readonly{% endif %}>
+      </div>
+      <div class="form-group">
+        <label for="title">合同标题 *</label>
+        <input type="text" id="title" name="title" required
+               value="{{ contract.title if contract else '' }}">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="party_a">甲方 *</label>
+        <input type="text" id="party_a" name="party_a" required
+               value="{{ contract.party_a if contract else '' }}">
+      </div>
+      <div class="form-group">
+        <label for="party_b">乙方 *</label>
+        <input type="text" id="party_b" name="party_b" required
+               value="{{ contract.party_b if contract else '' }}">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="amount">金额 (元)</label>
+      <input type="number" id="amount" name="amount" step="0.01" min="0"
+             value="{{ contract.amount if contract and contract.amount else '' }}">
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="sign_date">签署日期</label>
+        <input type="date" id="sign_date" name="sign_date"
+               value="{{ contract.sign_date.strftime('%Y-%m-%d') if contract and contract.sign_date else '' }}">
+      </div>
+      <div class="form-group">
+        <label for="start_date">开始日期</label>
+        <input type="date" id="start_date" name="start_date"
+               value="{{ contract.start_date.strftime('%Y-%m-%d') if contract and contract.start_date else '' }}">
+      </div>
+      <div class="form-group">
+        <label for="end_date">结束日期</label>
+        <input type="date" id="end_date" name="end_date"
+               value="{{ contract.end_date.strftime('%Y-%m-%d') if contract and contract.end_date else '' }}">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="description">备注</label>
+      <textarea id="description" name="description"
+                rows="4">{{ contract.description if contract and contract.description else '' }}</textarea>
+    </div>
+
+    <div class="btn-group">
+      <button type="submit" class="btn btn-primary">保存</button>
+      <a href="{{ base_path }}/contracts" class="btn btn-outline">取消</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// AJAX form submission to API
+document.getElementById('contract-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const formData = new FormData(this);
+  const data = {};
+  formData.forEach((v, k) => { data[k] = v || null; });
+  // Convert empty date strings to null, amount to float
+  ['sign_date', 'start_date', 'end_date'].forEach(f => {
+    if (data[f] === '' || data[f] === null) data[f] = null;
+  });
+  if (data.amount === '' || data.amount === null) data.amount = null;
+  else data.amount = parseFloat(data.amount);
+
+  const isEdit = '{{ contract.id if contract else '' }}';
+  const url = isEdit ? '/api/contracts/' + isEdit : '/api/contracts';
+  const method = isEdit ? 'PUT' : 'POST';
+
+  try {
+    await apiFetch(url, { method, body: JSON.stringify(data) });
+    window.location.href = BASE_PATH + '/contracts';
+  } catch (err) {
+    showFlash('保存失败: ' + err.message);
+  }
+});
+</script>
+{% endblock %}

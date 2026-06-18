@@ -1,5 +1,52 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head><meta charset="UTF-8"><title>用户管理</title></head>
-<body><h1>用户管理</h1><p>Placeholder</p></body>
-</html>
+{% extends "base.html" %}
+{% block title %}用户管理 - 合同管理系统{% endblock %}
+{% block content %}
+<div class="container">
+  <div class="page-header">
+    <h1>用户管理</h1>
+    <a href="{{ base_path }}/users/new" class="btn btn-primary">+ 新建用户</a>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>用户名</th>
+          <th>显示名称</th>
+          <th>邮箱</th>
+          <th>角色</th>
+          <th>状态</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>{{ u.id }}</td>
+          <td>{{ u.username }}</td>
+          <td>{{ u.display_name }}</td>
+          <td>{{ u.email }}</td>
+          <td>
+            <span class="badge {% if u.role.value == 'admin' %}badge-danger{% elif u.role.value == 'manager' %}badge-pending{% else %}badge-draft{% endif %}">
+              {% if u.role.value == 'admin' %}管理员
+              {% elif u.role.value == 'manager' %}经理
+              {% else %}只读
+              {% endif %}
+            </span>
+          </td>
+          <td>
+            <span class="badge {% if u.status.value == 'active' %}badge-signed{% else %}badge-terminated{% endif %}">
+              {{ '启用' if u.status.value == 'active' else '禁用' }}
+            </span>
+          </td>
+          <td>
+            <a href="{{ base_path }}/users/{{ u.id }}/edit" class="btn btn-outline btn-sm">编辑</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

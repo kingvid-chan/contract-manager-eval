@@ -1,5 +1,84 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head><meta charset="UTF-8"><title>合同列表</title></head>
-<body><h1>合同列表</h1><p>Placeholder</p></body>
-</html>
+{% extends "base.html" %}
+{% block title %}合同列表 - 合同管理系统{% endblock %}
+{% block content %}
+<div class="container">
+  <div class="page-header">
+    <h1>合同列表</h1>
+    {% if user.role.value != 'viewer' %}
+    <a href="{{ base_path }}/contracts/new" class="btn btn-primary">+ 新建合同</a>
+    {% endif %}
+  </div>
+
+  <div class="toolbar">
+    <input type="text" id="search-input" class="search-box"
+           placeholder="搜索合同编号或标题..." value="{{ q }}">
+    <select id="filter-status">
+      <option value="">全部状态</option>
+      {% for s in [ContractStatus.draft, ContractStatus.pending, ContractStatus.signed, ContractStatus.terminated, ContractStatus.expired] %}
+      <option value="{{ s.value }}" {% if status_filter == s.value %}selected{% endif %}>
+        {% if s.value == 'draft' %}草稿
+        {% elif s.value == 'pending' %}待签
+        {% elif s.value == 'signed' %}已签
+        {% elif s.value == 'terminated' %}已终止
+        {% elif s.value == 'expired' %}已过期
+        {% endif %}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  {% if contracts %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>合同编号</th>
+          <th>标题</th>
+          <th>甲方</th>
+          <th>乙方</th>
+          <th>金额 (元)</th>
+          <th>状态</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in contracts %}
+        <tr>
+          <td><a href="{{ base_path }}/contracts/{{ c.id }}">{{ c.contract_no }}</a></td>
+          <td>{{ c.title }}</td>
+          <td>{{ c.party_a }}</td>
+          <td>{{ c.party_b }}</td>
+          <td>{% if c.amount %}{{ "{:,.2f}".format(c.amount) }}{% else %}—{% endif %}</td>
+          <td>
+            <span class="badge badge-{{ c.status.value }}">
+              {% if c.status.value == 'draft' %}草稿
+              {% elif c.status.value == 'pending' %}待签
+              {% elif c.status.value == 'signed' %}已签
+              {% elif c.status.value == 'terminated' %}已终止
+              {% elif c.status.value == 'expired' %}已过期
+              {% endif %}
+            </span>
+          </td>
+          <td>
+            <div class="btn-group">
+              <a href="{{ base_path }}/contracts/{{ c.id }}" class="btn btn-outline btn-sm">查看</a>
+              {% if user.role.value != 'viewer' %}
+              <a href="{{ base_path }}/contracts/{{ c.id }}/edit" class="btn btn-outline btn-sm">编辑</a>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <p>暂无合同{% if q or status_filter %}，尝试调整筛选条件{% endif %}</p>
+    {% if user.role.value != 'viewer' %}
+    <a href="{{ base_path }}/contracts/new" class="btn btn-primary">创建第一个合同</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

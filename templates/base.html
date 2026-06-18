@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}合同管理系统{% endblock %}</title>
+  <link rel="stylesheet" href="{{ base_path }}/static/css/style.css?v={{ version }}">
+</head>
+<body data-base-path="{{ base_path }}" data-version="{{ version }}">
+
+<nav class="navbar">
+  <a href="{{ base_path }}/contracts" class="brand">📋 合同管理系统</a>
+  <div class="nav-links">
+    {% if user %}
+    <a href="{{ base_path }}/contracts" class="{% if request.url.path == base_path + '/contracts' %}active{% endif %}">合同管理</a>
+    {% if user.role.value == 'admin' %}
+    <a href="{{ base_path }}/users" class="{% if base_path + '/users' in request.url.path %}active{% endif %}">用户管理</a>
+    {% endif %}
+    <span class="user-info">{{ user.display_name }} ({{ user.role.value }})</span>
+    <button id="logout-btn" class="logout-btn">退出</button>
+    {% else %}
+    <a href="{{ base_path }}/login">登录</a>
+    {% endif %}
+  </div>
+</nav>
+
+<div id="flash-messages">
+  {% if error %}
+  <div class="container"><div class="alert alert-error">{{ error }}</div></div>
+  {% endif %}
+  {% if success %}
+  <div class="container"><div class="alert alert-success">{{ success }}</div></div>
+  {% endif %}
+</div>
+
+<main>{% block content %}{% endblock %}</main>
+
+<script src="{{ base_path }}/static/js/app.js?v={{ version }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

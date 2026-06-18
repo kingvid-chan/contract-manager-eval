@@ -1,5 +1,149 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head><meta charset="UTF-8"><title>合同详情</title></head>
-<body><h1>合同详情</h1><p>Placeholder</p></body>
-</html>
+{% extends "base.html" %}
+{% block title %}{{ contract.title }} - 合同管理系统{% endblock %}
+{% block content %}
+<div class="container">
+  <div class="page-header">
+    <h1>{{ contract.title }}</h1>
+    <div class="btn-group">
+      <a href="{{ base_path }}/contracts" class="btn btn-outline">返回列表</a>
+      {% if user.role.value != 'viewer' %}
+      <a href="{{ base_path }}/contracts/{{ contract.id }}/edit" class="btn btn-primary">编辑</a>
+      {% if user.role.value == 'admin' %}
+      <button id="delete-contract-btn" class="btn btn-danger"
+              data-contract-id="{{ contract.id }}">删除</button>
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="detail-grid">
+    <div class="detail-item">
+      <label>合同编号</label>
+      <div class="value">{{ contract.contract_no }}</div>
+    </div>
+    <div class="detail-item">
+      <label>状态</label>
+      <div class="value">
+        <span class="badge badge-{{ contract.status.value }}">
+          {% if contract.status.value == 'draft' %}草稿
+          {% elif contract.status.value == 'pending' %}待签
+          {% elif contract.status.value == 'signed' %}已签
+          {% elif contract.status.value == 'terminated' %}已终止
+          {% elif contract.status.value == 'expired' %}已过期
+          {% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="detail-item">
+      <label>甲方</label>
+      <div class="value">{{ contract.party_a }}</div>
+    </div>
+    <div class="detail-item">
+      <label>乙方</label>
+      <div class="value">{{ contract.party_b }}</div>
+    </div>
+    <div class="detail-item">
+      <label>金额</label>
+      <div class="value">{% if contract.amount %}¥{{ "{:,.2f}".format(contract.amount) }}{% else %}—{% endif %}</div>
+    </div>
+    <div class="detail-item">
+      <label>创建人</label>
+      <div class="value">{{ creator.display_name if creator else '—' }}</div>
+    </div>
+    <div class="detail-item">
+      <label>签署日期</label>
+      <div class="value">{{ contract.sign_date.strftime('%Y-%m-%d') if contract.sign_date else '—' }}</div>
+    </div>
+    <div class="detail-item">
+      <label>合同期限</label>
+      <div class="value">
+        {{ contract.start_date.strftime('%Y-%m-%d') if contract.start_date else '—' }}
+        至
+        {{ contract.end_date.strftime('%Y-%m-%d') if contract.end_date else '—' }}
+      </div>
+    </div>
+    <div class="detail-item full-width">
+      <label>备注</label>
+      <div class="value">{{ contract.description or '—' }}</div>
+    </div>
+  </div>
+
+  {% if user.role.value != 'viewer' %}
+  <!-- Status Transitions -->
+  <div class="section">
+    <h2>状态操作</h2>
+    <div class="btn-group">
+      {% for target in valid_transitions.get(contract.status, []) %}
+      {% set labels = {
+        ContractStatus.pending: '提交审批',
+        ContractStatus.signed: '签署',
+        ContractStatus.terminated: '终止',
+        ContractStatus.expired: '标记过期',
+        ContractStatus.draft: '退回',
+      } %}
+      {% set styles = {
+        ContractStatus.pending: 'btn-warning',
+        ContractStatus.signed: 'btn-success',
+        ContractStatus.terminated: 'btn-danger',
+        ContractStatus.expired: 'btn-outline',
+        ContractStatus.draft: 'btn-outline',
+      } %}
+      <button class="btn {{ styles.get(target, 'btn-outline') }} transition-btn"
+              data-contract-id="{{ contract.id }}"
+              data-action="{{ target.value }}"
+              data-label="{{ labels.get(target, target.value) }}">
+        {{ labels.get(target, target.value) }}
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Attachments -->
+  <div class="section">
+    <h2>附件 ({{ attachments|length }})</h2>
+
+    {% if attachments %}
+    <ul class="attachment-list">
+      {% for a in attachments %}
+      <li class="attachment-item">
+        <span class="info">
+          📎 {{ a.original_name }}
+          <span class="size">({{ "{:,.1f}".format(a.file_size / 1024) }} KB)</span>
+          <span class="badge badge-{% if a.file_type == 'pdf' %}draft{% else %}pending{% endif %}">
+            {{ a.file_type.upper() }}
+          </span>
+        </span>
+        <div class="btn-group">
+          <a href="/api/contracts/{{ contract.id }}/attachments/{{ a.id }}" class="btn btn-outline btn-sm">下载</a>
+          {% if user.role.value != 'viewer' %}
+          <button class="btn btn-danger btn-sm delete-attachment"
+                  data-contract-id="{{ contract.id }}"
+                  data-attachment-id="{{ a.id }}">删除</button>
+          {% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p style="color: var(--gray-500); font-size: .9rem;">暂无附件</p>
+    {% endif %}
+
+    {% if user.role.value != 'viewer' %}
+    <div class="attachment-upload">
+      <div class="form-row" style="align-items: end;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="attachment-file">上传新附件</label>
+          <input type="file" id="attachment-file" accept=".pdf,.doc,.docx">
+        </div>
+        <button id="attachment-upload-btn" class="btn btn-primary"
+                data-contract-id="{{ contract.id }}">上传</button>
+      </div>
+      <p style="font-size: .75rem; color: var(--gray-500); margin-top: 6px;">
+        支持 PDF、DOC、DOCX，最大 10MB
+      </p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

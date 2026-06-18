@@ -1,5 +1,89 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head><meta charset="UTF-8"><title>用户表单</title></head>
-<body><h1>用户表单</h1><p>Placeholder</p></body>
-</html>
+{% extends "base.html" %}
+{% block title %}{% if edit_user %}编辑用户{% else %}新建用户{% endif %} - 合同管理系统{% endblock %}
+{% block content %}
+<div class="container">
+  <div class="page-header">
+    <h1>{% if edit_user %}编辑用户「{{ edit_user.username }}」{% else %}新建用户{% endif %}</h1>
+    <a href="{{ base_path }}/users" class="btn btn-outline">返回列表</a>
+  </div>
+
+  <form method="post" data-validate
+        action="{% if edit_user %}/api/users/{{ edit_user.id }}{% else %}/api/users{% endif %}"
+        id="user-form">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="username">用户名 *</label>
+        <input type="text" id="username" name="username" required
+               minlength="2" maxlength="64"
+               value="{{ edit_user.username if edit_user else '' }}"
+               {% if edit_user %}readonly{% endif %}>
+      </div>
+      <div class="form-group">
+        <label for="password">密码{% if not edit_user %} *{% endif %}</label>
+        <input type="password" id="password" name="password"
+               minlength="6" maxlength="128"
+               placeholder="{% if edit_user %}留空不修改密码{% else %}至少6位{% endif %}"
+               {% if not edit_user %}required{% endif %}>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="display_name">显示名称 *</label>
+        <input type="text" id="display_name" name="display_name" required
+               value="{{ edit_user.display_name if edit_user else '' }}">
+      </div>
+      <div class="form-group">
+        <label for="email">邮箱 *</label>
+        <input type="email" id="email" name="email" required
+               value="{{ edit_user.email if edit_user else '' }}">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="role">角色 *</label>
+        <select id="role" name="role" required>
+          <option value="admin" {% if edit_user and edit_user.role.value == 'admin' %}selected{% endif %}>管理员 (admin)</option>
+          <option value="manager" {% if edit_user and edit_user.role.value == 'manager' %}selected{% endif %}>经理 (manager)</option>
+          <option value="viewer" {% if edit_user and edit_user.role.value == 'viewer' or not edit_user %}selected{% endif %}>只读 (viewer)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="status">状态 *</label>
+        <select id="status" name="status" required>
+          <option value="active" {% if not edit_user or edit_user.status.value == 'active' %}selected{% endif %}>启用</option>
+          <option value="disabled" {% if edit_user and edit_user.status.value == 'disabled' %}selected{% endif %}>禁用</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button type="submit" class="btn btn-primary">保存</button>
+      <a href="{{ base_path }}/users" class="btn btn-outline">取消</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('user-form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const formData = new FormData(this);
+  const data = {};
+  formData.forEach((v, k) => { data[k] = v || null; });
+
+  const isEdit = '{{ edit_user.id if edit_user else '' }}';
+  const url = isEdit ? '/api/users/' + isEdit : '/api/users';
+  const method = isEdit ? 'PUT' : 'POST';
+
+  try {
+    await apiFetch(url, { method, body: JSON.stringify(data) });
+    window.location.href = BASE_PATH + '/users';
+  } catch (err) {
+    showFlash('保存失败: ' + err.message);
+  }
+});
+</script>
+{% endblock %}

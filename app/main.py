@@ -1,10 +1,11 @@
 """FastAPI application entry point for the Contract Manager system."""
 
 import datetime
+import os
 from fastapi import FastAPI, Request, Depends, HTTPException, status, Form
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -22,14 +23,29 @@ app = FastAPI(title="合同管理系统", version="0.0.1")
 # Middleware: must add Cache-Control: no-cache to HTML responses
 app.add_middleware(CacheControlMiddleware)
 
-# Templates
-templates = Jinja2Templates(directory="templates")
+# Templates — use jinja2.Environment directly to avoid Starlette/Jinja2 compat issues
+_TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "templates")
+_STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
+_jinja_env = Environment(
+    loader=FileSystemLoader(_TEMPLATE_DIR),
+    autoescape=select_autoescape(["html"]),
+)
+
+
+def render_template(name: str, context: dict, status_code: int = 200,
+                    headers: dict | None = None) -> HTMLResponse:
+    """Render a Jinja2 template and return an HTMLResponse."""
+    template = _jinja_env.get_template(name)
+    content = template.render(**context)
+    resp_headers = headers or {}
+    return HTMLResponse(content=content, status_code=status_code, headers=resp_headers)
+
 
 # ── Static Files ───────────────────────────────────────────────────────
 
 app.mount(
     f"{settings.BASE_PATH}/static",
-    StaticFiles(directory="static"),
+    StaticFiles(directory=_STATIC_DIR),
     name="static",
 )
 
@@ -65,7 +81,6 @@ def _template_context(request: Request, user: User | None = None) -> dict:
         "base_path": settings.BASE_PATH,
         "version": VERSION,
         "user": user,
-        "user_roles": {r.value: r.value for r in UserRole},
     }
 
 
@@ -102,13 +117,19 @@ def _require_page_auth(request: Request):
 
 # ── Frontend Page Routes ────────────────────────────────────────────────
 
+@app.get("/")
+def root():
+    """Redirect root to contracts page."""
+    return RedirectResponse(url=f"{settings.BASE_PATH}/contracts", status_code=302)
+
+
 @app.get(f"{settings.BASE_PATH}/login", response_class=HTMLResponse)
 def login_page(request: Request):
     """Render the login page."""
     user = _get_page_user(request)
     if user:
         return RedirectResponse(url=f"{settings.BASE_PATH}/contracts", status_code=302)
-    return templates.TemplateResponse("login.html", _template_context(request))
+    return render_template("login.html", _template_context(request))
 
 
 @app.post(f"{settings.BASE_PATH}/login")
@@ -124,12 +145,12 @@ def login_submit(
         if not user or not verify_password(password, user.password_hash):
             ctx = _template_context(request)
             ctx["error"] = "用户名或密码错误"
-            return templates.TemplateResponse("login.html", ctx, status_code=401)
+            return render_template("login.html", ctx, status_code=401)
 
         if user.status == UserStatus.disabled:
             ctx = _template_context(request)
             ctx["error"] = "账户已被禁用"
-            return templates.TemplateResponse("login.html", ctx, status_code=403)
+            return render_template("login.html", ctx, status_code=403)
 
         token = create_access_token(data={"sub": str(user.id), "role": user.role.value})
 
@@ -144,12 +165,6 @@ def login_submit(
         return resp
     finally:
         db.close()
-
-
-@app.get("/")
-def root():
-    """Redirect root to contracts page."""
-    return RedirectResponse(url=f"{settings.BASE_PATH}/contracts", status_code=302)
 
 
 @app.get(f"{settings.BASE_PATH}/contracts", response_class=HTMLResponse)
@@ -187,7 +202,7 @@ def contracts_list_page(request: Request):
         ctx["status_filter"] = status_filter
         ctx["q"] = q
         ctx["ContractStatus"] = ContractStatus
-        return templates.TemplateResponse("contracts/list.html", ctx)
+        return render_template("contracts/list.html", ctx)
     finally:
         db.close()
 
@@ -203,7 +218,7 @@ def contract_new_page(request: Request):
 
     ctx = _template_context(request, user)
     ctx["contract"] = None
-    return templates.TemplateResponse("contracts/form.html", ctx)
+    return render_template("contracts/form.html", ctx)
 
 
 @app.get(f"{settings.BASE_PATH}/contracts/{{contract_id}}", response_class=HTMLResponse)
@@ -238,7 +253,7 @@ def contract_detail_page(request: Request, contract_id: int):
             ContractStatus.pending: {ContractStatus.signed, ContractStatus.draft},
             ContractStatus.signed: {ContractStatus.terminated, ContractStatus.expired},
         }
-        return templates.TemplateResponse("contracts/detail.html", ctx)
+        return render_template("contracts/detail.html", ctx)
     finally:
         db.close()
 
@@ -260,7 +275,7 @@ def contract_edit_page(request: Request, contract_id: int):
 
         ctx = _template_context(request, user)
         ctx["contract"] = contract
-        return templates.TemplateResponse("contracts/form.html", ctx)
+        return render_template("contracts/form.html", ctx)
     finally:
         db.close()
 
@@ -281,7 +296,7 @@ def users_list_page(request: Request):
         ctx["users"] = users
         ctx["UserRole"] = UserRole
         ctx["UserStatus"] = UserStatus
-        return templates.TemplateResponse("users/list.html", ctx)
+        return render_template("users/list.html", ctx)
     finally:
         db.close()
 
@@ -299,7 +314,7 @@ def user_new_page(request: Request):
     ctx["edit_user"] = None
     ctx["UserRole"] = UserRole
     ctx["UserStatus"] = UserStatus
-    return templates.TemplateResponse("users/form.html", ctx)
+    return render_template("users/form.html", ctx)
 
 
 @app.get(f"{settings.BASE_PATH}/users/{{edit_id}}/edit", response_class=HTMLResponse)
@@ -321,7 +336,7 @@ def user_edit_page(request: Request, edit_id: int):
         ctx["edit_user"] = edit_user
         ctx["UserRole"] = UserRole
         ctx["UserStatus"] = UserStatus
-        return templates.TemplateResponse("users/form.html", ctx)
+        return render_template("users/form.html", ctx)
     finally:
         db.close()
 
