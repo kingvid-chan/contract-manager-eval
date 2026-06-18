@@ -3,47 +3,77 @@
 import os
 import sys
 import pytest
+import tempfile
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 # Ensure project root is in path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Override settings before importing app modules
+# Override settings before importing app modules (needed by app.config)
 os.environ["JWT_SECRET"] = "test-secret-key-for-testing-only"
-os.environ["DATABASE_URL"] = "sqlite:///./data/test_contract_manager.db"
+os.environ["JWT_ALGORITHM"] = "HS256"
+os.environ["JWT_EXPIRE_HOURS"] = "1"
 os.environ["UPLOAD_DIR"] = "data/test_uploads"
 
-from app.config import settings
-from app.database import engine, Base, SessionLocal
-from app.models import User, Contract, ContractStatus, UserRole, UserStatus
-from app.auth import hash_password
+# ── Use in-memory SQLite with StaticPool so all connections share one DB ──
+TEST_ENGINE = create_engine(
+    "sqlite://",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+
+TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=TEST_ENGINE)
+
+# Need to import models to register them on Base BEFORE we import app.database
+from app.models import User, Contract, ContractStatus, UserRole, UserStatus  # noqa: E402
+from app.database import Base, get_db  # noqa: E402
+from app.auth import hash_password  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def setup_test_db():
-    """Create test database tables before each test module, drop after."""
-    Base.metadata.create_all(bind=engine)
+    """Create/drop tables for each test function to ensure isolation."""
+    Base.metadata.drop_all(bind=TEST_ENGINE)
+    Base.metadata.create_all(bind=TEST_ENGINE)
     yield
-    # Clean up
-    Base.metadata.drop_all(bind=engine)
+    Base.metadata.drop_all(bind=TEST_ENGINE)
 
 
 @pytest.fixture
 def db():
     """Provide a database session."""
-    session = SessionLocal()
+    session = TestSessionLocal()
     try:
         yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()
 
 
 @pytest.fixture
 def client():
-    """FastAPI TestClient."""
+    """FastAPI TestClient with overridden get_db dependency."""
     from app.main import app
+
+    def override_get_db():
+        session = TestSessionLocal()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+
     with TestClient(app) as c:
         yield c
+
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
