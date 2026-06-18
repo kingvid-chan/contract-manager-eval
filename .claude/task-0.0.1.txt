@@ -1,54 +1,52 @@
-你是合同管理系统的技术专家。请按以下步骤推进迭代 0.0.1：
+你是技术专家。先读 .claude/CLAUDE.md、docs/architecture.md、docs/iterations/0.0.1.md 和相关 ADR（如有）。
 
-## 1. 先读文档
-- .claude/CLAUDE.md（技术约束）
-- docs/architecture.md（当前为空模板，需要你填写）
-- docs/iterations/0.0.1.md（迭代范围）
-- case/events.jsonl 中的 e000002 requirement_defined（完整需求）
+本项目是合同管理系统 MVP，迭代 0.0.1。技术栈：Python FastAPI + SQLAlchemy + SQLite 后端，Jinja2 SSR 前端。部署到 http://120.24.117.67/projects/contract-manager-eval/。
 
-## 2. 输出技术方案
-把技术方案、风险、任务拆解写入 docs/iterations/0.0.1.md。
+任务按 docs/iterations/0.0.1.md 中 T1-T8 拆解执行：
 
-## 3. 完整交付物（必须全部实施）
+T1: 项目骨架 + 配置 + 依赖
+- requirements.txt (已有)
+- .env.example (已有)
+- app/__init__.py, app/config.py
+- 安装依赖 (pip install -r requirements.txt)
 
-### 后端 (FastAPI + SQLAlchemy + SQLite)
-- 数据模型：User (id, username, password_hash, display_name, email, role, status, created_at, updated_at), Contract (id, contract_no, title, party_a, party_b, amount, status, sign_date, start_date, end_date, description, created_by FK, created_at, updated_at), Attachment (id, contract_id FK, filename, original_name, file_type, file_size, storage_path, uploaded_by FK, uploaded_at), AuditLog (id, user_id FK, action, entity_type, entity_id, detail, created_at)
-- JWT 认证中间件
-- REST API：登录、用户 CRUD（admin 权限）、合同 CRUD + 状态流转、附件上传下载删除
-- 附件校验：扩展名 + magic bytes（pdf 头 %PDF-，docx 头 PK，doc 头 D0CF11E0），≤10MB
-- 数据库初始化脚本 + 种子数据（3 个演示账号）
-- .env.example
+T2: 数据库层
+- app/database.py, app/models.py (User, Contract, Attachment, AuditLog)
+- scripts/init_db.py (建表 + 3个演示账号种子数据)
+- 运行验证
 
-### 前端 (Jinja2 + 静态 CSS/JS)
-- 登录页
-- 合同列表页（表格，分状态筛选）
-- 合同详情/编辑页
-- 附件上传（文件选择 + 预览）
-- 用户管理页（仅 admin）
-- 导航栏 + 退出登录
-- 所有静态资源 URL 带 ?v=0.0.1 版本令牌
+T3: 认证模块
+- app/auth.py (bcrypt + JWT), app/dependencies.py, app/middleware.py (Cache-Control)
 
-### 数据库
-- SQLite，初始化脚本 + 迁移
-- 种子数据：admin/admin123, manager/manager123, viewer/viewer123（密码 bcrypt 哈希）
+T4: API 路由
+- app/schemas.py, app/utils.py
+- app/routers/auth.py, users.py, contracts.py, attachments.py
+- app/main.py (组装应用 + 前端页面路由 + healthz)
 
-### 自测
-- pytest 覆盖：登录认证、用户 CRUD、合同 CRUD + 状态流转、附件上传下载 + 类型校验、权限边界
-- 测试输出保存到 evidence/claude/
+T5: 前端模板 + 静态资源
+- static/css/style.css, static/js/app.js
+- templates/ (base.html, login.html, contracts/*, users/*)
+- 页面路由配置
 
-### 文档
-- docs/architecture.md：业务模型、技术架构、模块职责、数据流、部署拓扑、安全边界
-- docs/runbook.md：本地运行步骤、环境要求
-- docs/decisions/：至少记录 01-python-fastapi-sqlite.md 和 02-jinja2-ssr.md
+T6: 测试
+- tests/conftest.py, test_auth.py, test_users.py, test_contracts.py, test_attachments.py
+- 运行全部测试确保通过
 
-## 4. 环境
-- Python 环境：/Users/cqw/外部需求/.conda/codingagent/bin/python
-- 工作目录：/Users/cqw/外部需求/contract-manager-eval
-- 分支：iteration/0.0.1
+T7: 文档
+- 填写 docs/architecture.md, docs/runbook.md
+- docs/decisions/ 下 ADR
 
-## 5. 提交规范
-- 每项可验证改动一个小提交
-- 不修改 case/ 目录
-- 不合并 main、不打 tag、不部署
+T8: 终验
+- 运行完整测试套件
+- 保存输出到 evidence/claude/
+- 检查 CLAUDE.md 约束
+- 报告自测完成，申请 Hermes 验收
 
-请先输出技术方案和任务拆解，然后逐项实施。每完成一个模块自测后继续下一个。全部完成后保存自测输出到 evidence/claude/，向我申请 Hermes 独立验收。
+每个 task 完成后 git add + commit（小步提交，遵守 .cursorrules 的 Agent-* trailer）。完成后报告自测结果和测试命令输出。
+
+注意：
+- 所有 HTML 响应头必须包含 Cache-Control: no-cache
+- 静态资源路径使用 /projects/contract-manager-eval/static/ 前缀
+- 附件校验：扩展名 + magic bytes，≤10MB
+- 演示账号密码用 bcrypt 哈希
+- /healthz 端点返回 200

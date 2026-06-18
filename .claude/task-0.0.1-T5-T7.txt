@@ -1,0 +1,179 @@
+你是合同管理系统的技术专家 Claude Code。项目已完成：数据库层（T2）、认证模块（T3）、API路由+schemas+app入口（T4）。请继续完成剩余任务。
+
+先读这些文件了解当前状态：
+- .claude/CLAUDE.md
+- docs/iterations/0.0.1.md（完整技术方案和任务拆解）
+- app/ 下所有现有代码
+- case/events.jsonl 中的 e000002 requirement_defined
+
+已完成的可复用模块：
+- app/models.py: User, Contract, Attachment, AuditLog 模型
+- app/auth.py: JWT token + bcrypt 密码哈希
+- app/dependencies.py: get_current_user, require_admin, require_manager_or_admin, get_token_from_request
+- app/middleware.py: CacheControlMiddleware
+- app/schemas.py: 所有 Pydantic 请求/响应模型
+- app/utils.py: validate_attachment（扩展名+magic bytes校验）, create_audit_log
+- app/config.py: Settings（JWT_SECRET, DATABASE_URL, UPLOAD_DIR, BASE_PATH）
+- app/database.py: engine, SessionLocal, Base, get_db
+- app/routers/auth.py: POST /api/auth/login
+- app/routers/users.py: CRUD /api/users（admin only）
+- app/routers/contracts.py: CRUD /api/contracts + 状态流转 + 筛选搜索
+- app/routers/attachments.py: POST/GET/DELETE /api/contracts/{id}/attachments
+- app/main.py: FastAPI 应用入口，Jinja2 配置，页面路由
+- scripts/init_db.py: 数据库初始化+种子数据
+- data/contract_manager.db: 已有种子数据的 SQLite 文件
+
+请按以下顺序完成剩余任务：
+
+## T5: 前端模板 + 静态资源
+
+静态资源路径格式：/projects/contract-manager-eval/static/{css,js}/*?v=0.0.1
+
+### static/css/style.css
+现代简洁的企业后台风格：
+- 白色背景 #fff，深色文字 #1a1a2e
+- 主色调 #2563eb（蓝色），危险 #dc2626（红），成功 #16a34a（绿）
+- 导航栏：深色背景 #1e293b，白色文字，sticky top
+- 表格：斑马纹，hover 高亮，圆角边框
+- 表单：标签在上，input/select/textarea 全宽，focus 蓝色边框
+- 按钮：.btn, .btn-primary, .btn-danger, .btn-sm
+- 状态标签：.badge, .badge-draft, .badge-pending, .badge-signed, .badge-terminated, .badge-expired
+- 响应式基础（max-width 容器）
+- 登录页居中卡片样式
+
+### static/js/app.js
+纯 JavaScript（无框架）：
+- API 请求封装：apiGet, apiPost, apiPut, apiDelete（自动带 Authorization Bearer token，根据响应状态处理 401 跳转登录）
+- Token 管理：localStorage 存取
+- 合同状态流转按钮交互
+- 附件上传预览（文件名显示）
+- 表单提交（阻止默认，JSON/FormData，显示错误/成功消息）
+- 用户角色/状态下拉联动
+
+### templates/
+使用 Jinja2 模板语法。所有 URL 用 base_path 前缀。
+
+#### templates/base.html
+- HTML5 doctype, lang="zh-CN"
+- viewport meta 标签
+- 引入 static/css/style.css?v=0.0.1 和 static/js/app.js?v=0.0.1
+- 导航栏：左侧"合同管理系统"，右侧根据 user 角色显示链接
+  - 所有用户：合同列表
+  - manager/admin：新建合同
+  - admin：用户管理
+  - 已登录：用户名 + 角色标签 + 退出按钮
+- {% block content %}{% endblock %}
+- 底部加载 app.js
+
+#### templates/login.html
+- 居中卡片（400px 宽）
+- 标题"合同管理系统"
+- 用户名输入框 + 密码输入框
+- 登录按钮（蓝色主色调）
+- 错误提示区域
+- JS：表单提交后调用 POST /api/auth/login，存储 token，跳转首页
+
+#### templates/contracts/list.html
+- 搜索栏：状态下拉筛选（全部/草稿/待签/已签/终止/过期）+ 关键词搜索输入框
+- 新建合同按钮（manager/admin 可见）
+- 表格列：合同编号、标题、甲方、乙方、金额、状态（彩色标签）、创建人、更新时间、操作
+- 操作按钮：查看、编辑（manager/admin）、状态流转（manager/admin）、删除（admin）
+- 状态流转弹出简单的选择+确认
+
+#### templates/contracts/form.html
+- 新建/编辑合同表单
+- 字段：合同编号、标题、甲方、乙方、金额、签署日期、开始日期、结束日期、状态（创建时默认草稿，编辑时可改）、描述
+- 提交按钮 + 取消链接
+
+#### templates/contracts/detail.html
+- 合同详情展示（所有字段）
+- 状态流转操作区（按钮根据当前状态和用户角色动态显示可转换的目标状态）
+- 附件区域：
+  - 附件列表（文件名、类型、大小、上传时间、下载链接、删除按钮）
+  - 上传附件表单（文件选择 + 上传按钮，仅 manager/admin）
+- 编辑按钮 + 返回列表链接
+
+#### templates/users/list.html
+- 表格列：ID、用户名、显示名、邮箱、角色、状态、创建时间、操作
+- 新建用户按钮
+- 操作：编辑
+
+#### templates/users/form.html
+- 表单：用户名、密码（新建必填/编辑选填）、显示名、邮箱、角色下拉、状态下拉
+- 提交 + 取消
+
+## T6: 测试
+
+### tests/conftest.py
+- 使用测试专用 SQLite 内存数据库
+- 覆盖 get_db 依赖
+- client fixture（TestClient）
+- 种子数据 fixture（admin/manager/viewer 三个用户）
+- auth_headers fixture（返回各角色的 Bearer token）
+
+### tests/test_auth.py
+- test_login_success
+- test_login_wrong_password
+- test_login_disabled_user
+- test_login_nonexistent_user
+
+### tests/test_users.py
+- test_list_users_admin
+- test_list_users_forbidden (manager/viewer should fail)
+- test_create_user
+- test_create_duplicate_username
+- test_update_user
+- test_get_user
+
+### tests/test_contracts.py
+- test_create_contract
+- test_create_contract_duplicate_no
+- test_list_contracts
+- test_filter_by_status
+- test_search_by_keyword
+- test_get_contract
+- test_update_contract
+- test_delete_contract_admin_only
+- test_delete_contract_forbidden
+- test_transition_draft_to_pending
+- test_transition_pending_to_signed
+- test_transition_invalid
+
+### tests/test_attachments.py
+- Mock 文件上传（使用 io.BytesIO + magic bytes 头）
+- test_upload_pdf
+- test_upload_docx
+- test_upload_invalid_extension
+- test_upload_invalid_magic_bytes
+- test_upload_too_large (需要创建一个大 BytesIO)
+- test_download_attachment
+- test_delete_attachment
+
+## T7: 文档
+
+### docs/architecture.md
+填写完整：系统目标与边界、技术栈与选择理由、模块职责与依赖、数据流与状态流、部署拓扑、安全边界、已知限制
+
+### docs/runbook.md
+本地运行步骤：Python 版本、安装依赖、初始化数据库、启动服务、访问地址
+
+### docs/decisions/01-python-fastapi-sqlite.md
+选择 FastAPI + SQLite 的理由、替代方案（Django/Flask/PostgreSQL）、限制
+
+### docs/decisions/02-jinja2-ssr.md
+选择 Jinja2 SSR 的理由、替代方案（React SPA/htmx）、限制和版本令牌策略
+
+## 提交规范
+- 每完成一个 T 做一个小提交
+- 不修改 case/ 目录
+- 提交信息格式：feat/fix/docs/test: 描述，带 Agent-version/Agent-task/Agent-status trailer
+
+## 关键约束
+- BASE_PATH = /projects/contract-manager-eval/
+- 所有静态资源 URL 带 ?v=0.0.1
+- 所有 HTML 模板中资源引用用 base_path 变量
+- Cache-Control HTTP 响应头由 middleware.py 已处理
+- 前端 API 调用 base URL 为 ''（相对路径，因为 Nginx 代理）
+- 健康检查端点已存在：GET /projects/contract-manager-eval/api/health
+
+全部完成后运行完整测试套件，保存输出到 evidence/claude/，然后向我申请 Hermes 独立验收。不得宣布交付。

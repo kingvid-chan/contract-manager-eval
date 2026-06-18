@@ -6,23 +6,54 @@
     <h1>📋 合同管理系统</h1>
     <p class="subtitle">请使用演示账号登录</p>
 
-    {% if error %}
-    <div class="alert alert-error">{{ error }}</div>
-    {% endif %}
+    <div id="login-error" class="alert alert-error" style="display:{% if error %}block{% else %}none{% endif %}">
+      {{ error or '' }}
+    </div>
 
-    <form method="post" action="{{ base_path }}/login" data-validate>
+    <form id="login-form" data-validate>
       <div class="form-group">
         <label for="username">用户名</label>
         <input type="text" id="username" name="username" required autofocus
-               placeholder="admin / manager / viewer">
+               placeholder="admin / manager / viewer"
+               value="{{ username or '' }}">
       </div>
       <div class="form-group">
         <label for="password">密码</label>
         <input type="password" id="password" name="password" required
                placeholder="admin123 / manager123 / viewer123">
       </div>
-      <button type="submit" class="btn btn-primary btn-lg" style="width:100%">登录</button>
+      <button type="submit" class="btn btn-primary" style="width:100%;padding:10px 16px;">登录</button>
     </form>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+  var loginForm = document.getElementById('login-form');
+  if (!loginForm) return;
+
+  loginForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var errorEl = document.getElementById('login-error');
+    if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+
+    var username = loginForm.querySelector('[name="username"]').value;
+    var password = loginForm.querySelector('[name="password"]').value;
+    var submitBtn = loginForm.querySelector('button[type="submit"]');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '登录中...'; }
+
+    window.apiPost('/api/auth/login', { username: username, password: password })
+      .then(function(data) {
+        localStorage.setItem('access_token', data.access_token);
+        window.location.href = BASE_PATH + '/contracts';
+      })
+      .catch(function(err) {
+        if (errorEl) { errorEl.style.display = 'block'; errorEl.textContent = err.message || '登录失败'; }
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '登录'; }
+      });
+  });
+})();
+</script>
 {% endblock %}
