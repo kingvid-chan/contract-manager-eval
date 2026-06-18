@@ -117,7 +117,7 @@ def _require_page_auth(request: Request):
 
 # ── Frontend Page Routes ────────────────────────────────────────────────
 
-@app.get("/")
+@app.get("/projects/contract-manager-eval/")
 def root():
     """Redirect root to contracts page."""
     return RedirectResponse(url=f"{settings.BASE_PATH}/contracts", status_code=302)
