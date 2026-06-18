@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>登录 - 合同管理系统</title>
+    <link rel="stylesheet" href="{{ base_path }}/static/css/style.css?v={{ version }}">
+</head>
+<body>
+    <h1>合同管理系统</h1>
+    <form method="post" action="{{ base_path }}/api/auth/login">
+        <input type="text" name="username" placeholder="用户名" required>
+        <input type="password" name="password" placeholder="密码" required>
+        <input type="hidden" name="redirect" value="{{ base_path }}/">
+        <button type="submit">登录</button>
+    </form>
+    <script src="{{ base_path }}/static/js/app.js?v={{ version }}"></script>
+</body>
+</html>

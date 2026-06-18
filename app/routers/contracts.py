@@ -1,90 +1,93 @@
-"""Contract management routes — CRUD + state transitions."""
+"""Contracts router: CRUD + state transitions."""
 
+import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
+from app.models import Contract, ContractStatus, User, UserRole, Attachment
 from app.schemas import (
-    ContractCreate,
-    ContractUpdate,
-    ContractStatusTransition,
-    ContractResponse,
-    ContractListResponse,
+    ContractCreate, ContractUpdate, ContractResponse,
+    ContractDetailResponse, TransitionRequest, AttachmentResponse,
 )
-from app.models import Contract, ContractStatus, User, UserRole
 from app.dependencies import get_current_user, require_manager_or_admin, require_admin
-from app.utils import create_audit_log
+from app.utils import log_audit
 
 router = APIRouter(prefix="/api/contracts", tags=["contracts"])
 
-# Valid status transitions
-VALID_TRANSITIONS: dict[ContractStatus, set[ContractStatus]] = {
+
+def _require_manage_access(current_user: User = Depends(require_manager_or_admin)):
+    """Dependency: manager or admin for write operations."""
+    return current_user
+
+
+# ── Transition logic ───────────────────────────────────────────────────
+
+VALID_TRANSITIONS = {
     ContractStatus.draft: {ContractStatus.pending, ContractStatus.terminated},
     ContractStatus.pending: {ContractStatus.signed, ContractStatus.draft},
     ContractStatus.signed: {ContractStatus.terminated, ContractStatus.expired},
-    ContractStatus.terminated: set(),
-    ContractStatus.expired: set(),
+}
+
+TRANSITION_LABELS = {
+    "pending": "提交审批",
+    "signed": "签署",
+    "terminated": "终止",
+    "expired": "过期",
+    "draft": "退回",
 }
 
 
-def _contract_to_response(contract: Contract, creator: User | None = None) -> ContractResponse:
-    """Convert a Contract ORM object to a ContractResponse dict."""
-    return ContractResponse(
-        id=contract.id,
-        contract_no=contract.contract_no,
-        title=contract.title,
-        party_a=contract.party_a,
-        party_b=contract.party_b,
-        amount=contract.amount,
-        status=contract.status.value if contract.status else "draft",
-        sign_date=contract.sign_date,
-        start_date=contract.start_date,
-        end_date=contract.end_date,
-        description=contract.description,
-        created_by=contract.created_by,
-        created_at=contract.created_at,
-        updated_at=contract.updated_at,
-        creator_name=creator.display_name if creator else None,
-    )
+def _apply_auto_expired(contract: Contract) -> bool:
+    """Check if a signed contract has passed its end_date and mark expired."""
+    if contract.status == ContractStatus.signed and contract.end_date:
+        now = datetime.datetime.utcnow()
+        if contract.end_date < now:
+            contract.status = ContractStatus.expired
+            return True
+    return False
 
 
-@router.get("", response_model=ContractListResponse)
+# ── Routes ─────────────────────────────────────────────────────────────
+
+@router.get("", response_model=list[ContractResponse])
 def list_contracts(
     status_filter: str | None = Query(None, alias="status"),
     q: str | None = Query(None, alias="q"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List contracts with optional status and search filters."""
-    query = db.query(Contract).options(joinedload(Contract.creator))
+    """List contracts with optional status filter and search."""
+    query = db.query(Contract)
 
     if status_filter:
         query = query.filter(Contract.status == status_filter)
 
     if q:
-        like_pattern = f"%{q}%"
+        search = f"%{q}%"
         query = query.filter(
-            (Contract.contract_no.ilike(like_pattern)) |
-            (Contract.title.ilike(like_pattern))
+            (Contract.contract_no.like(search)) | (Contract.title.like(search))
         )
 
     contracts = query.order_by(Contract.updated_at.desc()).all()
 
-    return ContractListResponse(
-        contracts=[_contract_to_response(c, c.creator) for c in contracts],
-        total=len(contracts),
-    )
+    # Auto-expire signed contracts past end_date
+    for c in contracts:
+        _apply_auto_expired(c)
+    db.commit()
+
+    return contracts
 
 
 @router.post("", response_model=ContractResponse, status_code=status.HTTP_201_CREATED)
 def create_contract(
-    request: ContractCreate,
+    data: ContractCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_manager_or_admin),
+    current_user: User = Depends(_require_manage_access),
 ):
-    """Create a new contract (manager or admin)."""
-    # Check contract_no uniqueness
-    existing = db.query(Contract).filter(Contract.contract_no == request.contract_no).first()
+    """Create a new contract."""
+    # Check for duplicate contract number
+    existing = db.query(Contract).filter(Contract.contract_no == data.contract_no).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -92,91 +95,95 @@ def create_contract(
         )
 
     contract = Contract(
-        contract_no=request.contract_no,
-        title=request.title,
-        party_a=request.party_a,
-        party_b=request.party_b,
-        amount=request.amount,
-        status=request.status,  # type: ignore[arg-type]
-        sign_date=request.sign_date,
-        start_date=request.start_date,
-        end_date=request.end_date,
-        description=request.description,
+        contract_no=data.contract_no,
+        title=data.title,
+        party_a=data.party_a,
+        party_b=data.party_b,
+        amount=data.amount,
+        status=ContractStatus.draft,
+        description=data.description,
         created_by=current_user.id,
     )
+
+    # Handle date fields
+    for field_name in ("sign_date", "start_date", "end_date"):
+        value = getattr(data, field_name)
+        if value:
+            if isinstance(value, str):
+                try:
+                    value = datetime.datetime.fromisoformat(value)
+                except (ValueError, TypeError):
+                    value = datetime.datetime.strptime(value, "%Y-%m-%d")
+            setattr(contract, field_name, value)
+
     db.add(contract)
     db.commit()
     db.refresh(contract)
 
-    create_audit_log(
-        db, current_user,
-        action="create_contract",
-        entity_type="contract",
-        entity_id=contract.id,
-        detail=f"创建合同 {contract.contract_no}",
-    )
+    log_audit(db, current_user.id, "create", "contract", contract.id,
+              f"Created contract {contract.contract_no}")
+    db.commit()
 
-    return _contract_to_response(contract, current_user)
+    return contract
 
 
-@router.get("/{contract_id}", response_model=ContractResponse)
+@router.get("/{contract_id}", response_model=ContractDetailResponse)
 def get_contract(
     contract_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get a single contract by ID."""
-    contract = db.query(Contract).options(joinedload(Contract.creator)).filter(
-        Contract.id == contract_id
-    ).first()
+    """Get contract detail with attachments."""
+    contract = db.query(Contract).options(
+        joinedload(Contract.creator),
+        joinedload(Contract.attachments),
+    ).filter(Contract.id == contract_id).first()
+
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="合同不存在")
-    return _contract_to_response(contract, contract.creator)
+
+    _apply_auto_expired(contract)
+    db.commit()
+
+    return contract
 
 
 @router.put("/{contract_id}", response_model=ContractResponse)
 def update_contract(
     contract_id: int,
-    request: ContractUpdate,
+    data: ContractUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_manager_or_admin),
+    current_user: User = Depends(_require_manage_access),
 ):
-    """Update a contract (manager or admin)."""
+    """Update a contract."""
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="合同不存在")
 
-    changed = []
+    changes = []
+    for field_name in ("title", "party_a", "party_b", "amount", "description",
+                       "sign_date", "start_date", "end_date"):
+        value = getattr(data, field_name)
+        if value is not None:
+            # Parse date strings
+            if field_name in ("sign_date", "start_date", "end_date"):
+                if isinstance(value, str):
+                    try:
+                        value = datetime.datetime.fromisoformat(value)
+                    except (ValueError, TypeError):
+                        value = datetime.datetime.strptime(value, "%Y-%m-%d")
+            setattr(contract, field_name, value)
+            changes.append(field_name)
 
-    if request.contract_no is not None:
-        existing = db.query(Contract).filter(
-            Contract.contract_no == request.contract_no,
-            Contract.id != contract_id,
-        ).first()
-        if existing:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="合同编号已存在")
-        contract.contract_no = request.contract_no
-        changed.append(f"contract_no={request.contract_no}")
+    db.commit()
+    db.refresh(contract)
 
-    for field in ["title", "party_a", "party_b", "amount", "sign_date",
-                   "start_date", "end_date", "description"]:
-        val = getattr(request, field, None)
-        if val is not None:
-            setattr(contract, field, val)
-            changed.append(f"{field}={val}")
-
-    if changed:
+    if changes:
+        log_audit(db, current_user.id, "update", "contract", contract.id,
+                  f"Updated {', '.join(changes)} for contract {contract.contract_no}")
         db.commit()
-        db.refresh(contract)
-        create_audit_log(
-            db, current_user,
-            action="update_contract",
-            entity_type="contract",
-            entity_id=contract.id,
-            detail=f"更新合同 {contract.contract_no}: {', '.join(changed)}",
-        )
 
-    return _contract_to_response(contract, current_user)
+    return contract
 
 
 @router.delete("/{contract_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -192,63 +199,65 @@ def delete_contract(
 
     contract_no = contract.contract_no
     db.delete(contract)
-    db.commit()
 
-    create_audit_log(
-        db, current_user,
-        action="delete_contract",
-        entity_type="contract",
-        entity_id=contract_id,
-        detail=f"删除合同 {contract_no}",
-    )
+    log_audit(db, current_user.id, "delete", "contract", contract_id,
+              f"Deleted contract {contract_no}")
+    db.commit()
 
 
 @router.post("/{contract_id}/transition", response_model=ContractResponse)
 def transition_contract(
     contract_id: int,
-    request: ContractStatusTransition,
+    data: TransitionRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_manager_or_admin),
+    current_user: User = Depends(_require_manage_access),
 ):
-    """Transition a contract's status (manager or admin).
-
-    Valid transitions:
-        draft → pending, terminated
-        pending → signed, draft
-        signed → terminated, expired
-    """
+    """Transition a contract to a new status."""
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="合同不存在")
 
+    # Check auto-expire
+    _apply_auto_expired(contract)
+
     try:
-        target = ContractStatus(request.target_status)
+        target_status = ContractStatus(data.action)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"无效的状态: {request.target_status}",
+            detail=f"无效的状态操作: {data.action}",
         )
 
-    current_status = contract.status
-    allowed = VALID_TRANSITIONS.get(current_status, set())
-
-    if target not in allowed:
+    # Validate transition
+    allowed = VALID_TRANSITIONS.get(contract.status, set())
+    if target_status not in allowed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"不允许从 {current_status.value} 转换到 {target.value}",
+            detail=f"不允许从 {contract.status.value} 转换到 {data.action}（只能转到: {[s.value for s in allowed]}）",
         )
 
+    # Special handling for signed → expired
+    if target_status == ContractStatus.expired and contract.end_date:
+        now = datetime.datetime.utcnow()
+        if contract.end_date >= now:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="合同尚未到期，不能手动设为过期",
+            )
+
     old_status = contract.status.value
-    contract.status = target
+    contract.status = target_status
+
+    # Set sign_date when transitioning to signed
+    if target_status == ContractStatus.signed and not contract.sign_date:
+        contract.sign_date = datetime.datetime.utcnow()
+
     db.commit()
     db.refresh(contract)
 
-    create_audit_log(
-        db, current_user,
-        action="transition_contract",
-        entity_type="contract",
-        entity_id=contract.id,
-        detail=f"合同 {contract.contract_no} 状态: {old_status} → {target.value}",
-    )
+    action_label = TRANSITION_LABELS.get(data.action, data.action)
+    log_audit(db, current_user.id, "transition", "contract", contract.id,
+              f"Changed contract {contract.contract_no} status from {old_status} to {data.action}")
+    db.commit()
 
-    return _contract_to_response(contract, current_user)
+    return contract

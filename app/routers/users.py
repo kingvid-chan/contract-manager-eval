@@ -1,40 +1,36 @@
-"""User management routes — admin-only CRUD operations."""
+"""Users router: admin CRUD for user management."""
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.schemas import UserCreate, UserUpdate, UserResponse, UserListResponse
-from app.models import User
-from app.dependencies import require_admin, get_current_user
+from app.models import User, UserStatus
+from app.schemas import UserCreate, UserUpdate, UserResponse
 from app.auth import hash_password
-from app.utils import create_audit_log
+from app.dependencies import require_admin
+from app.utils import log_audit
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 
-@router.get("", response_model=UserListResponse)
+@router.get("", response_model=list[UserResponse])
 def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     """List all users (admin only)."""
-    users = db.query(User).order_by(User.id).all()
-    return UserListResponse(
-        users=[UserResponse.model_validate(u) for u in users],
-        total=len(users),
-    )
+    return db.query(User).order_by(User.id).all()
 
 
 @router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(
-    request: UserCreate,
+    data: UserCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     """Create a new user (admin only)."""
-    # Check username uniqueness
-    existing = db.query(User).filter(User.username == request.username).first()
+    # Check for duplicate username
+    existing = db.query(User).filter(User.username == data.username).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -42,45 +38,28 @@ def create_user(
         )
 
     user = User(
-        username=request.username,
-        password_hash=hash_password(request.password),
-        display_name=request.display_name,
-        email=request.email,
-        role=request.role,  # type: ignore[arg-type]
-        status=request.status,  # type: ignore[arg-type]
+        username=data.username,
+        password_hash=hash_password(data.password),
+        display_name=data.display_name,
+        email=data.email,
+        role=data.role,
+        status=data.status,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    create_audit_log(
-        db, current_user,
-        action="create_user",
-        entity_type="user",
-        entity_id=user.id,
-        detail=f"创建用户 {user.username} (role={user.role.value})",
-    )
+    log_audit(db, current_user.id, "create", "user", user.id,
+              f"Created user {user.username} with role {user.role.value}")
+    db.commit()
 
-    return UserResponse.model_validate(user)
-
-
-@router.get("/{user_id}", response_model=UserResponse)
-def get_user(
-    user_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
-):
-    """Get a single user by ID (admin only)."""
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
-    return UserResponse.model_validate(user)
+    return user
 
 
 @router.put("/{user_id}", response_model=UserResponse)
 def update_user(
     user_id: int,
-    request: UserUpdate,
+    data: UserUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -89,37 +68,29 @@ def update_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
 
-    changed = []
+    changes = []
+    if data.password is not None:
+        user.password_hash = hash_password(data.password)
+        changes.append("password")
+    if data.display_name is not None:
+        user.display_name = data.display_name
+        changes.append("display_name")
+    if data.email is not None:
+        user.email = data.email
+        changes.append("email")
+    if data.role is not None:
+        user.role = data.role
+        changes.append(f"role={data.role.value}")
+    if data.status is not None:
+        user.status = data.status
+        changes.append(f"status={data.status.value}")
 
-    if request.display_name is not None:
-        user.display_name = request.display_name
-        changed.append(f"display_name={request.display_name}")
+    db.commit()
+    db.refresh(user)
 
-    if request.email is not None:
-        user.email = request.email
-        changed.append(f"email={request.email}")
-
-    if request.role is not None:
-        user.role = request.role  # type: ignore[arg-type]
-        changed.append(f"role={request.role}")
-
-    if request.status is not None:
-        user.status = request.status  # type: ignore[arg-type]
-        changed.append(f"status={request.status}")
-
-    if request.password is not None:
-        user.password_hash = hash_password(request.password)
-        changed.append("password=***")
-
-    if changed:
+    if changes:
+        log_audit(db, current_user.id, "update", "user", user.id,
+                  f"Updated {', '.join(changes)} for user {user.username}")
         db.commit()
-        db.refresh(user)
-        create_audit_log(
-            db, current_user,
-            action="update_user",
-            entity_type="user",
-            entity_id=user.id,
-            detail=f"更新用户 {user.username}: {', '.join(changed)}",
-        )
 
-    return UserResponse.model_validate(user)
+    return user
